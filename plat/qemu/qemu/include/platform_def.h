@@ -337,11 +337,18 @@
 
 #if ENABLE_RME
 
+#ifndef ALIGN_DOWN
+#define ALIGN_DOWN(num, align)	(num & ~((align) - 1))
+#endif
+
 /*
  * Reserve some space at the end of secure DRAM for the Granule Protection
  * Tables
  */
 #define PLAT_QEMU_L0_GPT_BASE		(PLAT_QEMU_L1_GPT_BASE -	\
+					 (PLAT_QEMU_L0_GPT_SIZE +	\
+					  PLAT_QEMU_GPT_BITLOCK_SIZE))
+#define PLAT_QEMU_L0_GPT2_BASE		(PLAT_QEMU_L1_GPT2_BASE -	\
 					 (PLAT_QEMU_L0_GPT_SIZE +	\
 					  PLAT_QEMU_GPT_BITLOCK_SIZE))
 #define PLAT_QEMU_L0_GPT_SIZE		(2 * PAGE_SIZE)
@@ -350,6 +357,7 @@
 
 #define PLAT_QEMU_L1_GPT_BASE		(SEC_DRAM_BASE + SEC_DRAM_SIZE - \
 					 PLAT_QEMU_L1_GPT_SIZE)
+#define PLAT_QEMU_L1_GPT2_BASE		ALIGN_DOWN((PLAT_QEMU_L0_GPT_BASE - PLAT_QEMU_L1_GPT_SIZE), PLAT_QEMU_L1_GPT_SIZE)
 #define PLAT_QEMU_L1_GPT_END		(PLAT_QEMU_L1_GPT_BASE +	\
 					 PLAT_QEMU_L1_GPT_SIZE - 1U)
 #define PLAT_QEMU_L1_GPT_SIZE		UL(0x00200000)	/* 2MB */
@@ -363,6 +371,8 @@
 /* L0 table greater than 4KB must be naturally aligned */
 CASSERT((PLAT_QEMU_L0_GPT_BASE & (PLAT_QEMU_L0_GPT_SIZE - 1)) == 0,
 	assert_l0_gpt_naturally_aligned);
+CASSERT((PLAT_QEMU_L0_GPT2_BASE & (PLAT_QEMU_L0_GPT_SIZE - 1)) == 0,
+	assert_l0_gpt2_naturally_aligned);
 #endif
 
 /* Reserved some DRAM space for RMM (24MB) */
@@ -387,8 +397,19 @@ CASSERT((PLAT_QEMU_L0_GPT_BASE & (PLAT_QEMU_L0_GPT_SIZE - 1)) == 0,
 					PLAT_QEMU_GPT_BITLOCK_SIZE,	\
 					MT_MEMORY | MT_RW | EL3_PAS)
 
+#define MAP_GPT2_L0_REGION	MAP_REGION_FLAT(			\
+					PLAT_QEMU_L0_GPT2_BASE,		\
+					PLAT_QEMU_L0_GPT_SIZE +		\
+					PLAT_QEMU_GPT_BITLOCK_SIZE,	\
+					MT_MEMORY | MT_RW | EL3_PAS)
+
 #define MAP_GPT_L1_REGION	MAP_REGION_FLAT(			\
 					PLAT_QEMU_L1_GPT_BASE,		\
+					PLAT_QEMU_L1_GPT_SIZE,		\
+					MT_MEMORY | MT_RW | EL3_PAS)
+
+#define MAP_GPT2_L1_REGION	MAP_REGION_FLAT(			\
+					PLAT_QEMU_L1_GPT2_BASE,		\
 					PLAT_QEMU_L1_GPT_SIZE,		\
 					MT_MEMORY | MT_RW | EL3_PAS)
 /*

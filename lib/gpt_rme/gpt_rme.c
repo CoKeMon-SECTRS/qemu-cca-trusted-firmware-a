@@ -77,6 +77,13 @@ typedef struct {
 
 static gpt_config_t gpt_config;
 
+// XXX: 2gpt, refactor
+// in order not to refactor this entire file
+// we copied it and keep the init l0 l1 code redudant. this is the 2nd gpt (gpt1) setup
+// for smmu
+// see lib/gpt_rme/gpt_rme_gpt1.c
+extern gpt_config_t gpt_config1;
+
 /*
  * Number of L1 entries in 2MB, depending on GPCCR_EL3.PGS:
  * +-------+------------+
@@ -1959,4 +1966,10 @@ int gpt_undelegate_pas(uint64_t base, size_t size, unsigned int src_sec_state)
 		base, gpi_info.gpi, GPT_GPI_NS);
 
 	return 0;
+}
+
+void gpt_switch_gptbr(void){
+	write_gptbr_el3(((gpt_config.plat_gpt_l0_base >> GPTBR_BADDR_VAL_SHIFT)
+			>> GPTBR_BADDR_SHIFT) & GPTBR_BADDR_MASK);
+	isb();
 }

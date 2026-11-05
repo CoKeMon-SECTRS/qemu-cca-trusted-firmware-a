@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
+#include "platform_def.h"
 #include <assert.h>
 
 #include <common/bl_common.h>
@@ -135,6 +136,17 @@ static pas_region_t pas_regions[] = {
 	QEMU_PAS_NS1,
 };
 
+static pas_region_t pas_regions2[] = {
+	QEMU_PAS_ROOT,
+	QEMU_PAS_SECURE,
+	QEMU_PAS_GPTS,
+	QEMU_PAS_NS0,
+	QEMU_PAS_REALM,
+	QEMU_PAS_NS1_2,
+	QEMU_PAS_MICRO,
+	QEMU_PAS_NS1_3,
+};
+
 static inline void bl31_adjust_pas_regions(void) {}
 #elif PLAT_qemu_sbsa
 /*
@@ -180,6 +192,29 @@ static void bl31_adjust_pas_regions(void)
 
 static void bl31_plat_gpt_setup(void)
 {
+
+	INFO("PLAT_QEMU_L0_GPT_BASE: %lx\n", PLAT_QEMU_L0_GPT_BASE);
+	INFO("PLAT_QEMU_L0_GPT_SIZE: %lx\n", PLAT_QEMU_L0_GPT_SIZE);
+	INFO("PLAT_QEMU_L1_GPT_BASE: %lx\n", PLAT_QEMU_L1_GPT_BASE);
+	INFO("PLAT_QEMU_L1_GPT_SIZE: %lx\n", PLAT_QEMU_L1_GPT_SIZE);
+	INFO("PLAT_QEMU_L0_GPT2_BASE: %lx\n", PLAT_QEMU_L0_GPT2_BASE);
+	INFO("PLAT_QEMU_L1_GPT2_BASE: %lx\n", PLAT_QEMU_L1_GPT2_BASE);
+	INFO("QEMU_PAS_ROOT: %lx\n", pas_regions2[0].base_pa);
+	INFO("QEMU_PAS_ROOT SIZE: %lx\n", pas_regions2[0].size);
+	INFO("QEMU_PAS_SECURE: %lx\n", pas_regions2[1].base_pa);
+	INFO("QEMU_PAS_SECURE SIZE: %lx\n", pas_regions2[1].size);
+	INFO("QEMU_PAS_GPTS: %lx\n", pas_regions2[2].base_pa);
+	INFO("QEMU_PAS_GPTS SIZE: %lx\n", pas_regions2[2].size);
+	INFO("QEMU_PAS_NS0: %lx\n", pas_regions2[3].base_pa);
+	INFO("QEMU_PAS_NS0 SIZE: %lx\n", pas_regions2[3].size);
+	INFO("QEMU_PAS_REALM: %lx\n", pas_regions2[4].base_pa);
+	INFO("QEMU_PAS_REALM SIZE: %lx\n", pas_regions2[4].size);
+	INFO("QEMU_PAS_NS1_2: %lx\n", pas_regions2[5].base_pa);
+	INFO("QEMU_PAS_NS1_2 SIZE: %lx\n", pas_regions2[5].size);
+	INFO("QEMU_PAS_MICRO: %lx\n", pas_regions2[6].base_pa);
+	INFO("QEMU_PAS_MICRO SIZE: %lx\n", pas_regions2[6].size);
+	INFO("QEMU_PAS_NS1_3: %lx\n", pas_regions2[7].base_pa);
+	INFO("QEMU_PAS_NS1_3 SIZE: %lx\n", pas_regions2[7].size);
 	/*
 	 * Initialize entire protected space to GPT_GPI_ANY. With each L0 entry
 	 * covering 1GB (currently the only supported option), then covering
@@ -193,6 +228,13 @@ static void bl31_plat_gpt_setup(void)
 		panic();
 	}
 
+	if (gpt_init_l0_tables_gpt1(PLATFORM_GPCCR_PPS, PLAT_QEMU_L0_GPT2_BASE,
+			       PLAT_QEMU_L0_GPT_SIZE +
+			       PLAT_QEMU_GPT_BITLOCK_SIZE) < 0) {
+		ERROR("gpt_init_l0_tables_gpt1() failed!\n");
+		panic();
+	}
+
 	bl31_adjust_pas_regions();
 
 	/* Carve out defined PAS ranges. */
@@ -203,6 +245,16 @@ static void bl31_plat_gpt_setup(void)
 				   (unsigned int)(sizeof(pas_regions) /
 						  sizeof(pas_region_t))) < 0) {
 		ERROR("gpt_init_pas_l1_tables() failed!\n");
+		panic();
+	}
+
+	if (gpt_init_pas_l1_tables_gpt1(GPCCR_PGS_4K,
+				   PLAT_QEMU_L1_GPT2_BASE,
+				   PLAT_QEMU_L1_GPT_SIZE,
+				   pas_regions2,
+				   (unsigned int)(sizeof(pas_regions2) /
+						  sizeof(pas_region_t))) < 0) {
+		ERROR("gpt_init_pas_l1_tables_gpt1() failed!\n");
 		panic();
 	}
 
@@ -226,6 +278,8 @@ void bl31_plat_arch_setup(void)
 		MAP_GPT_L0_REGION,
 		MAP_GPT_L1_REGION,
 		MAP_RMM_SHARED_MEM,
+		MAP_GPT2_L0_REGION,
+		MAP_GPT2_L1_REGION,
 #endif
 		{0}
 	};

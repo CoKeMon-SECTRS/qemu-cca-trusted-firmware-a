@@ -9,6 +9,7 @@
 
 #if (CTX_INCLUDE_EL2_REGS && IMAGE_BL31)
 #include <lib/el3_runtime/context_el2.h>
+#include <lib/el3_runtime/context_el1.h>
 #else
 /**
  * El1 context is required either when:

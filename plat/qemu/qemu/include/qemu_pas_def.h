@@ -97,6 +97,18 @@
 							       QEMU_PAS_NS1_SIZE, \
 							       GPT_GPI_NS)
 
+#define QEMU_PAS_NS1_2			GPT_MAP_REGION_GRANULE(QEMU_PAS_NS1_BASE, \
+							       0xc0000000-QEMU_PAS_NS1_BASE, \
+							       GPT_GPI_NS)
+
+#define QEMU_PAS_MICRO			GPT_MAP_REGION_GRANULE(0xc0000000, \
+							       0x40000000, \
+							       GPT_GPI_NO_ACCESS)
+
+#define QEMU_PAS_NS1_3			GPT_MAP_REGION_GRANULE(0x100000000, \
+							       QEMU_PAS_NS1_SIZE-(0xc0000000-QEMU_PAS_NS1_BASE)-0x40000000, \
+							       GPT_GPI_NS)
+
 #define QEMU_PAS_REALM			GPT_MAP_REGION_GRANULE(QEMU_PAS_RMM_BASE, \
 							       QEMU_PAS_RMM_SIZE + \
 							       QEMU_PAS_RMM_SHARED_SIZE, \

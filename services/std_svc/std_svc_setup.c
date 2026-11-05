@@ -102,6 +102,12 @@ static uintptr_t std_svc_smc_handler(uint32_t smc_fid,
 			     void *handle,
 			     u_register_t flags)
 {
+	unsigned long esr_el3 = read_esr_el3();
+	if((esr_el3 & 0xffff) != 0){
+		return rmmd_rmi_handler(smc_fid, x1, x2, x3, x4, cookie,
+					handle, flags);
+	}
+
 	if (((smc_fid >> FUNCID_CC_SHIFT) & FUNCID_CC_MASK) == SMC_32) {
 		/* 32-bit SMC function, clear top parameter bits */
 

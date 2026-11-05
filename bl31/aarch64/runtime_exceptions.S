@@ -402,6 +402,15 @@ sync_handler64:
 
 	mov	sp, x12
 
+	/* Check ESR_EL3 ISS field — non-zero means a trapped instruction, not a normal SMC */
+	mrs	x16, esr_el3
+	and	x16, x16, #0xFFFF
+	cmp	x16, #0
+	beq	normal_exec
+	mov	x16, #68
+	b	load_desc
+normal_exec:
+
 	/*
 	 * Per SMCCC documentation, bits [23:17] must be zero for Fast
 	 * SMCs. Other values are reserved for future use. Ensure that
@@ -429,6 +438,7 @@ sync_handler64:
 	orr	x16, x16, x15, lsl #FUNCID_OEN_WIDTH
 
 	/* Load descriptor index from array of indices */
+load_desc:
 	adrp	x14, rt_svc_descs_indices
 	add	x14, x14, :lo12:rt_svc_descs_indices
 	ldrb	w15, [x14, x16]

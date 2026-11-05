@@ -208,6 +208,10 @@ int gpt_init_l0_tables(gpccr_pps_e pps,
 		       uintptr_t l0_mem_base,
 		       size_t l0_mem_size);
 
+int gpt_init_l0_tables_gpt1(gpccr_pps_e pps,
+		       uintptr_t l0_mem_base,
+		       size_t l0_mem_size);
+
 /*
  * Public API that carves out PAS regions from the L0 tables and builds any L1
  * tables that are needed.  This function ideally is run after DDR discovery and
@@ -230,6 +234,12 @@ int gpt_init_pas_l1_tables(gpccr_pgs_e pgs,
 			   pas_region_t *pas_regions,
 			   unsigned int pas_count);
 
+int gpt_init_pas_l1_tables_gpt1(gpccr_pgs_e pgs,
+			   uintptr_t l1_mem_base,
+			   size_t l1_mem_size,
+			   pas_region_t *pas_regions,
+			   unsigned int pas_count);
+
 /*
  * Public API to initialize the runtime gpt_config structure based on the values
  * present in the GPTBR_EL3 and GPCCR_EL3 registers. GPT initialization
@@ -242,6 +252,7 @@ int gpt_init_pas_l1_tables(gpccr_pgs_e pgs,
  *   Negative Linux error code in the event of a failure, 0 for success.
  */
 int gpt_runtime_init(void);
+int gpt_runtime_init_gpt1(void);
 
 /*
  * Public API to enable granule protection checks once the tables have all been
@@ -252,11 +263,15 @@ int gpt_runtime_init(void);
  *   Negative Linux error code in the event of a failure, 0 for success.
  */
 int gpt_enable(void);
+int gpt_enable_gpt1(void);
+void gpt_switch_gptbr(void);
+void gpt_switch_gptbr_gpt1(void);
 
 /*
  * Public API to disable granule protection checks.
  */
 void gpt_disable(void);
+void gpt_disable_gpt1(void);
 
 /*
  * This function is the core of the granule transition service. When a granule

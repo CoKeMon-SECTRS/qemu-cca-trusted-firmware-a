@@ -50,6 +50,10 @@ void cm_handle_asymmetric_features(void);
 #if (CTX_INCLUDE_EL2_REGS && IMAGE_BL31)
 void cm_el2_sysregs_context_save(uint32_t security_state);
 void cm_el2_sysregs_context_restore(uint32_t security_state);
+void cm_el2_sysregs_context_save_helper(cpu_context_t *ctx);
+void cm_el2_sysregs_context_restore_helper(cpu_context_t *ctx);
+void el1_sysregs_context_restore(el1_sysregs_t *ctx);
+void el1_sysregs_context_save(el1_sysregs_t *ctx);
 #else
 void cm_el1_sysregs_context_save(uint32_t security_state);
 void cm_el1_sysregs_context_restore(uint32_t security_state);

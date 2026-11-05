@@ -19,4 +19,4 @@ ifeq ($(filter 0 2 32 512, ${RME_GPT_MAX_BLOCK}),)
 endif
 
 GPT_LIB_SRCS	:=	$(addprefix lib/gpt_rme/,        \
-			gpt_rme.c)
+			gpt_rme.c gpt_rme_gpt1.c)

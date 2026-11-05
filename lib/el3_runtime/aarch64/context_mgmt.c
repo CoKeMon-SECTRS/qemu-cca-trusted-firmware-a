@@ -1403,14 +1403,12 @@ static void el2_sysregs_context_restore_common(el2_sysregs_t *ctx)
 }
 
 /*******************************************************************************
- * Save EL2 sysreg context
+ * Save EL2 sysreg context (helper taking cpu_context_t directly)
  ******************************************************************************/
-void cm_el2_sysregs_context_save(uint32_t security_state)
+void cm_el2_sysregs_context_save_helper(cpu_context_t *ctx)
 {
-	cpu_context_t *ctx;
 	el2_sysregs_t *el2_sysregs_ctx;
 
-	ctx = cm_get_context(security_state);
 	assert(ctx != NULL);
 
 	el2_sysregs_ctx = get_el2_sysregs_ctx(ctx);
@@ -1494,14 +1492,25 @@ void cm_el2_sysregs_context_save(uint32_t security_state)
 }
 
 /*******************************************************************************
- * Restore EL2 sysreg context
+ * Save EL2 sysreg context
  ******************************************************************************/
-void cm_el2_sysregs_context_restore(uint32_t security_state)
+void cm_el2_sysregs_context_save(uint32_t security_state)
 {
 	cpu_context_t *ctx;
-	el2_sysregs_t *el2_sysregs_ctx;
 
 	ctx = cm_get_context(security_state);
+	assert(ctx != NULL);
+
+	cm_el2_sysregs_context_save_helper(ctx);
+}
+
+/*******************************************************************************
+ * Restore EL2 sysreg context (helper taking cpu_context_t directly)
+ ******************************************************************************/
+void cm_el2_sysregs_context_restore_helper(cpu_context_t *ctx)
+{
+	el2_sysregs_t *el2_sysregs_ctx;
+
 	assert(ctx != NULL);
 
 	el2_sysregs_ctx = get_el2_sysregs_ctx(ctx);
@@ -1582,6 +1591,19 @@ void cm_el2_sysregs_context_restore(uint32_t security_state)
 	if (is_feat_sctlr2_supported()) {
 		write_sctlr2_el2(read_el2_ctx_sctlr2(el2_sysregs_ctx, sctlr2_el2));
 	}
+}
+
+/*******************************************************************************
+ * Restore EL2 sysreg context
+ ******************************************************************************/
+void cm_el2_sysregs_context_restore(uint32_t security_state)
+{
+	cpu_context_t *ctx;
+
+	ctx = cm_get_context(security_state);
+	assert(ctx != NULL);
+
+	cm_el2_sysregs_context_restore_helper(ctx);
 }
 #endif /* (CTX_INCLUDE_EL2_REGS && IMAGE_BL31) */
 
@@ -1672,12 +1694,13 @@ void cm_prepare_el3_exit_ns(void)
 #endif /* (CTX_INCLUDE_EL2_REGS && IMAGE_BL31) */
 }
 
-#if ((IMAGE_BL1) || (IMAGE_BL31 && (!CTX_INCLUDE_EL2_REGS)))
+// #if ((IMAGE_BL1) || (IMAGE_BL31 && (!CTX_INCLUDE_EL2_REGS)))
+#if ENABLE_RME
 /*******************************************************************************
  * The next set of six functions are used by runtime services to save and restore
  * EL1 context on the 'cpu_context' structure for the specified security state.
  ******************************************************************************/
-static void el1_sysregs_context_save(el1_sysregs_t *ctx)
+void el1_sysregs_context_save(el1_sysregs_t *ctx)
 {
 	write_el1_ctx_common(ctx, spsr_el1, read_spsr_el1());
 	write_el1_ctx_common(ctx, elr_el1, read_elr_el1());
@@ -1786,7 +1809,7 @@ static void el1_sysregs_context_save(el1_sysregs_t *ctx)
 	}
 }
 
-static void el1_sysregs_context_restore(el1_sysregs_t *ctx)
+void el1_sysregs_context_restore(el1_sysregs_t *ctx)
 {
 	write_spsr_el1(read_el1_ctx_common(ctx, spsr_el1));
 	write_elr_el1(read_el1_ctx_common(ctx, elr_el1));
@@ -1898,39 +1921,39 @@ static void el1_sysregs_context_restore(el1_sysregs_t *ctx)
  * The next couple of functions are used by runtime services to save and restore
  * EL1 context on the 'cpu_context' structure for the specified security state.
  ******************************************************************************/
-void cm_el1_sysregs_context_save(uint32_t security_state)
-{
-	cpu_context_t *ctx;
-
-	ctx = cm_get_context(security_state);
-	assert(ctx != NULL);
-
-	el1_sysregs_context_save(get_el1_sysregs_ctx(ctx));
-
-#if IMAGE_BL31
-	if (security_state == SECURE)
-		PUBLISH_EVENT(cm_exited_secure_world);
-	else
-		PUBLISH_EVENT(cm_exited_normal_world);
-#endif
-}
-
-void cm_el1_sysregs_context_restore(uint32_t security_state)
-{
-	cpu_context_t *ctx;
-
-	ctx = cm_get_context(security_state);
-	assert(ctx != NULL);
-
-	el1_sysregs_context_restore(get_el1_sysregs_ctx(ctx));
-
-#if IMAGE_BL31
-	if (security_state == SECURE)
-		PUBLISH_EVENT(cm_entering_secure_world);
-	else
-		PUBLISH_EVENT(cm_entering_normal_world);
-#endif
-}
+// void cm_el1_sysregs_context_save(uint32_t security_state)
+// {
+// 	cpu_context_t *ctx;
+//
+// 	ctx = cm_get_context(security_state);
+// 	assert(ctx != NULL);
+//
+// 	el1_sysregs_context_save(get_el1_sysregs_ctx(ctx));
+//
+// #if IMAGE_BL31
+// 	if (security_state == SECURE)
+// 		PUBLISH_EVENT(cm_exited_secure_world);
+// 	else
+// 		PUBLISH_EVENT(cm_exited_normal_world);
+// #endif
+// }
+//
+// void cm_el1_sysregs_context_restore(uint32_t security_state)
+// {
+// 	cpu_context_t *ctx;
+//
+// 	ctx = cm_get_context(security_state);
+// 	assert(ctx != NULL);
+//
+// 	el1_sysregs_context_restore(get_el1_sysregs_ctx(ctx));
+//
+// #if IMAGE_BL31
+// 	if (security_state == SECURE)
+// 		PUBLISH_EVENT(cm_entering_secure_world);
+// 	else
+// 		PUBLISH_EVENT(cm_entering_normal_world);
+// #endif
+// }
 
 #endif /* ((IMAGE_BL1) || (IMAGE_BL31 && (!CTX_INCLUDE_EL2_REGS))) */
 

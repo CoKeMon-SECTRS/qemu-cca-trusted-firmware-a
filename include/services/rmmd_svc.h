@@ -128,6 +128,7 @@
  */
 					/* 0x1B3 */
 #define RMM_ATTEST_GET_PLAT_TOKEN	SMC64_RMMD_EL3_FID(U(3))
+#define GPT_SWITCH_TABLE                SMC64_RMMD_EL3_FID(U(0x20))
 
 /* Starting RMM-EL3 interface version 0.4 */
 #define RMM_EL3_FEATURES				SMC64_RMMD_EL3_FID(U(4))

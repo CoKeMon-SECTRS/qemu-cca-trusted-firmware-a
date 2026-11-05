@@ -33,6 +33,9 @@
 #include <smccc_helpers.h>
 #include <lib/extensions/sme.h>
 #include <lib/extensions/sve.h>
+#include "arch/aarch32/arch_helpers.h"
+#include "common/ep_info.h"
+#include "lib/el3_runtime/context_el1.h"
 #include "rmmd_initial_context.h"
 #include "rmmd_private.h"
 
@@ -40,6 +43,18 @@
  * RMM boot failure flag
  ******************************************************************************/
 static bool rmm_boot_failed;
+
+/*******************************************************************************
+ * OS currently running in the normal world
+ ******************************************************************************/
+static uint8_t first_linux_boot=1;
+static uint8_t first_micro_switch=0;
+
+#define SYSTEMREG 0
+#define PAGETABLE 1
+
+#define MICRO_W 0
+#define LINUX_W 1
 
 /*******************************************************************************
  * RMM context information.
@@ -308,10 +323,75 @@ static uint64_t	rmmd_smc_forward(uint32_t src_sec_state,
 	SMC_RET5(ctx, x0, x1, x2, x3, x4);
 }
 
+static cpu_context_t normal_world_contexts[PLATFORM_CORE_COUNT];
+static el1_sysregs_t normal_world_el1_regs[2*PLATFORM_CORE_COUNT];
+
+void initial_save_ctx(uint8_t ns_world)
+{
+	for(int i=0;i<PLATFORM_CORE_COUNT;i++){
+		el1_sysregs_context_save(&normal_world_el1_regs[i+PLATFORM_CORE_COUNT*ns_world]);
+		if(ns_world==MICRO_W){
+			cpu_context_t *ctx_normal_world = get_cpu_data(cpu_context[get_cpu_context_index(NON_SECURE)]);
+			memcpy(&normal_world_contexts[i],ctx_normal_world,sizeof(cpu_context_t));
+		}
+	}
+}
+void save_el1_sysregs(uint8_t ns_world)
+{
+	uint64_t cpuid = plat_my_core_pos();
+	el1_sysregs_context_save(&normal_world_el1_regs[cpuid+PLATFORM_CORE_COUNT*ns_world]);
+}
+void restore_el1_sysregs(uint8_t ns_world)
+{
+	uint64_t cpuid = plat_my_core_pos();
+	el1_sysregs_context_restore(&normal_world_el1_regs[cpuid+PLATFORM_CORE_COUNT*ns_world]);
+}
+
+void *get_current_micro_ctx(){
+	uint64_t cpuid = plat_my_core_pos();
+	return &normal_world_contexts[cpuid];
+}
+
+void flush_tlb(){
+	tlbipaallos();
+	dsb();
+	isb();
+}
+
+uint64_t initial_linux_switch(void *handle){
+	uint32_t image_type = NON_SECURE;
+	entry_point_info_t *next_image_info;
+	/* Save incoming security state */
+	cm_el2_sysregs_context_save(NON_SECURE);
+	initial_save_ctx(MICRO_W);
+
+	next_image_info = bl31_plat_get_next_image_ep_info(image_type);
+	// Set pointer to the start of the other OS (Linux here)
+	next_image_info->pc=(uintptr_t)0x80000000;
+
+	INFO("BL31: Preparing for EL3 exit to %s world\n",
+		(image_type == SECURE) ? "secure" : "normal");
+	print_entry_point_info(next_image_info);
+	cm_init_my_context(next_image_info); // Initiliaze fresh new context for the second OS
+	INFO("We are going to exit TF-A into the image at %lx\n",next_image_info->pc);
+
+	gpt_enable_gpt1();
+
+	cm_prepare_el3_exit_ns();
+
+	first_linux_boot=0;
+	first_micro_switch=1;
+
+	flush_tlb();
+	SMC_RET0(handle);
+}
+
 /*******************************************************************************
  * This function handles all SMCs in the range reserved for RMI. Each call is
  * either forwarded to the other security state or handled by the RMM dispatcher
  ******************************************************************************/
+#define write_el2_ctx_common(ctx, reg, val)	((((ctx)->common).reg)	\
+							= (uint64_t) (val))
 uint64_t rmmd_rmi_handler(uint32_t smc_fid, uint64_t x1, uint64_t x2,
 			  uint64_t x3, uint64_t x4, void *cookie,
 			  void *handle, uint64_t flags)
@@ -333,11 +413,99 @@ uint64_t rmmd_rmi_handler(uint32_t smc_fid, uint64_t x1, uint64_t x2,
 		SMC_RET1(handle, SMC_UNK);
 	}
 
-	/*
-	 * Forward an RMI call from the Normal world to the Realm world as it
-	 * is.
-	 */
 	if (src_sec_state == SMC_FROM_NON_SECURE) {
+		if(smc_fid == (uint32_t) 0xc4000172){
+			INFO("Call into the TF-A from a thread");
+			SMC_RET0(handle);
+		}
+		unsigned long esr_el3_iss = read_esr_el3() & 0xffff;
+		if(esr_el3_iss != 0 || smc_fid == (uint32_t) 0xc4000170 || smc_fid == (uint32_t) 0xc4000171) { // SMC_RMI_OS_SWITCH
+			if (first_linux_boot){
+				INFO("First Switch to Linux\n");
+				return initial_linux_switch(handle);
+			}else if(first_micro_switch){
+				INFO("First Switch to the Microkernel\n");
+				initial_save_ctx(LINUX_W);
+				first_micro_switch=0;
+			}
+
+			cpu_context_t *ctx;
+			if(smc_fid == (uint32_t) 0xc4000170 || esr_el3_iss != 0){
+				VERBOSE("Switching to the Microkernel\n");
+
+				ctx = cm_get_context(NON_SECURE);
+				cm_el2_sysregs_context_save(NON_SECURE);
+				save_el1_sysregs(LINUX_W);
+				restore_el1_sysregs(MICRO_W);
+
+				gpt_switch_gptbr();
+
+				ctx = get_current_micro_ctx();
+				cm_el2_sysregs_context_restore_helper(ctx);
+				cm_set_next_context(ctx);
+				handle=ctx;
+			}else if (smc_fid == (uint32_t)0xc4000171) {
+				VERBOSE("Switching to Linux\n");
+
+				ctx = get_current_micro_ctx();
+				cm_el2_sysregs_context_save_helper(ctx);
+				save_el1_sysregs(MICRO_W);
+				restore_el1_sysregs(LINUX_W);
+
+				gpt_switch_gptbr_gpt1();
+
+				ctx = cm_get_context(NON_SECURE);
+				if(x3==SYSTEMREG){
+					el2_sysregs_t *el2_sysregs_ctx = get_el2_sysregs_ctx(ctx);
+					if(x2==5){
+						write_el2_ctx_vhe(el2_sysregs_ctx, ttbr1_el2, x1);
+					}else if(x2==4){
+						write_el2_ctx_common(el2_sysregs_ctx, ttbr0_el2, x1);
+					} else{
+						ERROR("ERROR: Not matching any of the writes was not planned\n");
+						SMC_RET0(handle);
+					}
+				}
+				cm_el2_sysregs_context_restore_helper(ctx);
+				cm_set_next_context(ctx);
+				handle=ctx;
+			}
+
+			flush_tlb();
+
+			if(smc_fid == (uint32_t) 0xc4000171){
+				SMC_RET0(handle);
+			}else if(esr_el3_iss != 0){
+				uint8_t type = (esr_el3_iss & 0x0f00) >> 8;
+				uint8_t reg = esr_el3_iss & 0x00ff;
+				uint64_t value_reg = 0xff;
+				switch(reg){
+					case 0:
+						value_reg=smc_fid;
+						break;
+					case 1:
+						value_reg=x1;
+						break;
+					case 2:
+						value_reg=x2;
+						break;
+					case 3:
+						value_reg=x3;
+						break;
+					case 4:
+						value_reg=x4;
+						break;
+					default:
+						ERROR("Register is not among the 5 registers we have access to. We need to access the other registers saved on the stack. Request type is %d with register %d\n",type,reg);
+						SMC_RET0(handle);
+				}
+				SMC_RET3(handle,value_reg,type, SYSTEMREG);
+			}else if(x3==PAGETABLE){
+				SMC_RET3(handle, x1 & 0xFFFFFFFF, x2, PAGETABLE);
+			}else{
+				SMC_RET3(handle, x1 >> 32, x1 & 0xFFFFFFFF, x2);
+			}
+		}
 		/*
 		 * If SVE hint bit is set in the flags then update the SMC
 		 * function id and pass it on to the lower EL.
@@ -346,6 +514,10 @@ uint64_t rmmd_rmi_handler(uint32_t smc_fid, uint64_t x1, uint64_t x2,
 			smc_fid |= (FUNCID_SVE_HINT_MASK <<
 				    FUNCID_SVE_HINT_SHIFT);
 		}
+		/*
+		 * Forward an RMI call from the Normal world to the Realm world as it
+		 * is.
+		 */
 		VERBOSE("RMMD: RMI call from non-secure world.\n");
 		return rmmd_smc_forward(NON_SECURE, REALM, smc_fid,
 					x1, x2, x3, x4, handle);
